@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main, audit-fixes]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r frontend/requirements.txt -r requirements-dev.txt
+      - name: Tests (offline)
+        run: pytest -q
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check backend/ tests/
+      - name: Mypy
+        run: mypy backend/
+
+  compose-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose config assertions
+        run: |
+          docker compose config > /tmp/cfg.yml
+          test "$(grep -c 'host_ip: 127.0.0.1' /tmp/cfg.yml)" -ge 2
+          test "$(grep -c 'user: 1000:1000' /tmp/cfg.yml)" -eq 2
+          docker compose --profile with-ollama config > /tmp/cfg2.yml
+          test "$(grep -c 'user: 1000:1000' /tmp/cfg2.yml)" -eq 3
+          grep -q '127.0.0.1:11434:11434' /tmp/cfg2.yml || grep -q 'published: "11434"' /tmp/cfg2.yml
+
+  offline-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Offline packaging dry-runs
+        run: |
+          bash scripts/package_for_offline.sh --dry-run
+          bash scripts/install_offline.sh --dry-run

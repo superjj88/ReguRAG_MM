@@ -1,0 +1,66 @@
+services:
+  ollama:
+    # Pinned by digest — re-pin deliberately when upgrading.
+    image: ollama/ollama@sha256:57d60e686821ea81a7748a3ec8141308c8b8f95b27105713954abf7a6529e700
+    container_name: regurag-ollama
+    profiles: ["with-ollama"]  # host reuse by default (Option 1) — use --profile with-ollama to run containerized ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./data:/data:ro
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: regurag-backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - REGURAG_CONFIG=/app/config.yaml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    user: "1000:1000"
+    restart: unless-stopped
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: regurag-frontend
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    user: "1000:1000"
+    restart: unless-stopped
+    mem_limit: 1g
+
+volumes:
+  ollama_data:
+    driver: local

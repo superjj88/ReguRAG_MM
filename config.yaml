@@ -1,0 +1,33 @@
+system:
+  topic_name: "kibbutz_regulations"    # UI/display value; corpus: תקנוני הקיבוץ
+  documents_path: "./data/regulations"
+  language: "he"
+
+hardware_profile: "dev_gpu"   # dev_gpu | prod_cpu
+
+models:
+  prod_cpu:
+    llm_name: "qwen2.5:3b-instruct-q4_K_M"
+    num_thread: 8              # tune to your machine's CPU core count
+  dev_gpu:
+    llm_name: "ornith-1.5:9b"
+    num_ctx: 32768             # 9B is GPU-resident on 24GB; 32K ctx covers 5-chunk prompts
+  embedding_model: "bge-m3"
+  ollama_base_url: "http://127.0.0.1:11434"   # not a container hostname
+
+retrieval:
+  top_k: 5
+  hybrid_search_alpha: 0.5
+  stage3_relevance_threshold: 0.6   # when to trigger Agentic Refinement
+  link_expansion: true              # widen candidates with linked docs (annex/parent/sibling)
+  link_expansion_max_chunks: 20     # cap on extra chunks pulled in by link expansion
+
+performance:
+  chat_timeout_seconds: 180    # generous budget for stage3 + generation (9B GPU ~10-30s)
+  ingestion_batch_size: 5      
+  qa_pairs_enabled: false      # optional LLM question-pair embeddings (slower ingestion)
+  cache_semantic_threshold: 0.85  # cosine threshold for serving a cached approved answer on a similar question
+
+ocr:
+  enabled: true               # OCR fallback (tesseract) for scanned pages with no text layer
+  languages: "heb+eng"        # tesseract -l value
